@@ -1,0 +1,138 @@
+# Cyberpunk: neon grid city, glitch title and a HUD-style access panel.
+
+background-image: "background.png"
+background-mode: "crop"
+background-color: "#0b0016"
+max-tries: "3"
+
+font-file: "fira-compressed-64.pf2"
+font-file: "hack-bold-20.pf2"
+font-file: "hack-regular-16.pf2"
+font-file: "hack-regular-13.pf2"
+
+# Panel, magenta when access is denied.
++ box {
+    show = "prompt,busy"
+    left = center   top = center
+    width = 640     height = 300
+    color = "#0a0014d8"
+    border-width = 1
+    border-color = "#00f0ff70"
+}
++ box {
+    show = "error"
+    left = center   top = center
+    width = 640     height = 300
+    color = "#14000cd8"
+    border-width = 1
+    border-color = "#ff2bd6"
+}
+
+# Corner brackets.
++ box { left = 50%-324  top = 50%-154  width = 56  height = 3   color = "#ff2bd6" }
++ box { left = 50%-324  top = 50%-154  width = 3   height = 56  color = "#ff2bd6" }
++ box { left = 50%+268  top = 50%+151  width = 56  height = 3   color = "#ff2bd6" }
++ box { left = 50%+321  top = 50%+98   width = 3   height = 56  color = "#ff2bd6" }
+
+# Glitch title: cyan and magenta copies offset behind the white one.
++ label {
+    left = center-4   top = 50%-138
+    text = "ACCESS//NODE"
+    font = "Fira Sans Compressed Regular 64"
+    color = "#00f0ffc0"
+}
++ label {
+    left = center+4   top = 50%-134
+    text = "ACCESS//NODE"
+    font = "Fira Sans Compressed Regular 64"
+    color = "#ff2bd6c0"
+}
++ label {
+    left = center   top = 50%-136
+    text = "ACCESS//NODE"
+    font = "Fira Sans Compressed Regular 64"
+    color = "#f4f0ff"
+}
+
++ label {
+    left = center   top = 50%-50
+    text = "ENCRYPTED VOLUME :: {device}"
+    font = "Hack Regular 13"
+    color = "#00f0ffb0"
+}
+
++ passphrase {
+    show = "prompt,busy"
+    left = center   top = 50%-12
+    width = 540     height = 52
+    padding = 16
+    align = "left"
+    font = "Hack Bold 20"
+    color = "#00f0ff"
+    background-color = "#00f0ff14"
+    border-width = 2
+    border-color = "#00f0ff"
+    mask = "■ "
+    placeholder = "ENTER PASSPHRASE"
+    placeholder-color = "#00f0ff60"
+    cursor-color = "#ff2bd6"
+}
++ passphrase {
+    show = "error"
+    left = center   top = 50%-12
+    width = 540     height = 52
+    padding = 16
+    align = "left"
+    font = "Hack Bold 20"
+    color = "#ff2bd6"
+    background-color = "#ff2bd614"
+    border-width = 2
+    border-color = "#ff2bd6"
+    mask = "■ "
+    placeholder = "RETRY PASSPHRASE"
+    placeholder-color = "#ff2bd680"
+    cursor-color = "#00f0ff"
+}
+
++ label {
+    show = "prompt"
+    left = 50%-270   top = 50%+62
+    text = "> AWAITING AUTHORIZATION_"
+    font = "Hack Regular 16"
+    color = "#00f0ffa0"
+}
++ label {
+    show = "busy"
+    left = 50%-270   top = 50%+62
+    text = "> DECRYPTING KEYSLOT ░▒▓█"
+    font = "Hack Regular 16"
+    color = "#f5e663"
+}
++ label {
+    show = "error"
+    left = 50%-270   top = 50%+62
+    text = "> ACCESS DENIED // ATTEMPTS REMAINING: {attempts_left}"
+    font = "Hack Regular 16"
+    color = "#ff2bd6"
+}
+
+# HUD corners of the screen.
++ label {
+    left = 32   top = 28
+    text = "[ SYS.BOOT ]  STAGE 2"
+    font = "Hack Regular 13"
+    color = "#00f0ff90"
+}
++ label {
+    left = 32   top = 100%-44
+    text = "NETRUNNER BOOT // GRUB"
+    font = "Hack Regular 13"
+    color = "#ff2bd6b0"
+}
++ label {
+    left = 100%-432   top = 100%-44   width = 400
+    align = "right"
+    text = "LINK: SECURE  ▪  NODE: LOCAL"
+    font = "Hack Regular 13"
+    color = "#00f0ff90"
+}

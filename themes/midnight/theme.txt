@@ -1,0 +1,82 @@
+# Midnight: a centered card with a lock icon on a blue/purple gradient.
+#
+# Coordinates: "120" pixels, "50%" of the screen, "50%-260", or "center"
+# (centers the element; "center+20" shifts it).
+# show = "always" (default) or a list of "prompt", "busy", "error".
+# Text placeholders: {device} {attempt} {max_tries} {attempts_left}
+
+background-image: "background.png"
+background-mode: "crop"
+background-color: "#070a14"
+max-tries: "3"
+
+font-file: "noto-sans-bold-32.pf2"
+font-file: "noto-sans-regular-20.pf2"
+font-file: "noto-sans-regular-16.pf2"
+
++ box {
+    left = center   top = center
+    width = 560     height = 320
+    color = "#0b1020c8"
+    border-width = 1
+    border-color = "#ffffff28"
+}
+
++ image {
+    file = "lock.png"
+    left = center   top = 50%-130
+}
+
++ label {
+    left = center   top = 50%-52   width = 520
+    text = "Encrypted disk"
+    font = "Noto Sans Bold 32"
+    align = "center"
+}
+
++ label {
+    show = "prompt"
+    left = center   top = 50%-2   width = 520
+    text = "Enter the passphrase to continue"
+    font = "Noto Sans Regular 16"
+    color = "#aab4cf"
+    align = "center"
+}
+
++ label {
+    show = "error"
+    left = center   top = 50%-2   width = 520
+    text = "Wrong passphrase. Attempts left: {attempts_left}"
+    font = "Noto Sans Regular 16"
+    color = "#ff7b7b"
+    align = "center"
+}
+
++ label {
+    show = "busy"
+    left = center   top = 50%-2   width = 520
+    text = "Unlocking…"
+    font = "Noto Sans Regular 16"
+    color = "#aab4cf"
+    align = "center"
+}
+
++ passphrase {
+    left = center   top = 50%+40
+    width = 400     height = 48
+    font = "Noto Sans Regular 20"
+    color = "#ffffff"
+    background-color = "#ffffff12"
+    border-width = 1
+    border-color = "#ffffff50"
+    mask = "•"
+    placeholder = "Passphrase"
+    placeholder-color = "#ffffff60"
+}
+
++ label {
+    left = center   top = 100%-48
+    text = "Enter unlocks  ·  Esc clears"
+    font = "Noto Sans Regular 16"
+    color = "#ffffff70"
+}

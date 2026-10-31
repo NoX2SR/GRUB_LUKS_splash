@@ -1,0 +1,13 @@
+# Upstream GRUB checkout and its build (scripts/build-grub.sh recreates them)
+/grub/
+/build/
+
+# Test VM: disk images, screenshots, and the libvirt definition (local paths)
+/vm/out/
+/vm/grub-unlock-test.xml
+
+# Local troubleshooting output (describes this machine)
+diagnose.txt
+
+__pycache__/
+*.pyc

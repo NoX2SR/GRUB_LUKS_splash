@@ -1,0 +1,64 @@
+# Minimal: one underlined field on a plain dark background; hides the passphrase length.
+
+background-color: "#121212"
+max-tries: "5"
+
+font-file: "noto-sans-regular-18.pf2"
+font-file: "noto-sans-regular-14.pf2"
+
++ label {
+    show = "prompt"
+    left = center   top = 50%-60
+    text = "Passphrase"
+    font = "Noto Sans Regular 14"
+    color = "#8a8a8a"
+}
+
++ label {
+    show = "busy"
+    left = center   top = 50%-60
+    text = "Unlocking…"
+    font = "Noto Sans Regular 14"
+    color = "#64b5f6"
+}
+
++ label {
+    show = "error"
+    left = center   top = 50%-60
+    text = "Try again"
+    font = "Noto Sans Regular 14"
+    color = "#e57373"
+}
+
++ passphrase {
+    left = center   top = 50%-24
+    width = 320     height = 44
+    font = "Noto Sans Regular 18"
+    color = "#eeeeee"
+    mask = "•"
+    mask-mode = "fixed"
+    fixed-length = "6"
+    cursor-color = "#eeeeee"
+}
+
+# Underline, colored by state.
++ box {
+    show = "prompt"
+    left = center   top = 50%+22
+    width = 320     height = 2
+    color = "#eeeeee"
+}
+
++ box {
+    show = "busy"
+    left = center   top = 50%+22
+    width = 320     height = 2
+    color = "#64b5f6"
+}
+
++ box {
+    show = "error"
+    left = center   top = 50%+22
+    width = 320     height = 2
+    color = "#e57373"
+}

@@ -1,0 +1,64 @@
+# Terminal: green phosphor console look, prompt in the lower left.
+
+background-image: "background.png"
+background-mode: "stretch"
+background-color: "#040804"
+max-tries: "3"
+
+font-file: "noto-sans-mono-18.pf2"
+
++ label {
+    left = 48   top = 100%-200
+    text = "[  OK  ] Reached target Firmware Handoff."
+    font = "Noto Sans Mono Regular 18"
+    color = "#2e8b46"
+}
+
++ label {
+    left = 48   top = 100%-170
+    text = "[  ..  ] Opening encrypted volume {device}"
+    font = "Noto Sans Mono Regular 18"
+    color = "#45d16b"
+}
+
++ label {
+    show = "prompt"
+    left = 48   top = 100%-120
+    text = "passphrase required:"
+    font = "Noto Sans Mono Regular 18"
+    color = "#7dff9b"
+}
+
++ label {
+    show = "busy"
+    left = 48   top = 100%-120
+    text = "checking key ..."
+    font = "Noto Sans Mono Regular 18"
+    color = "#7dff9b"
+}
+
++ label {
+    show = "error"
+    left = 48   top = 100%-120
+    text = "access denied ({attempts_left} tries left), passphrase required:"
+    font = "Noto Sans Mono Regular 18"
+    color = "#ff5f56"
+}
+
++ label {
+    left = 48   top = 100%-88
+    text = ">"
+    font = "Noto Sans Mono Regular 18"
+    color = "#7dff9b"
+}
+
++ passphrase {
+    left = 72   top = 100%-88
+    width = 50%     height = 26
+    padding = 0
+    align = "left"
+    font = "Noto Sans Mono Regular 18"
+    color = "#7dff9b"
+    mask = "*"
+    cursor-color = "#7dff9b"
+}
