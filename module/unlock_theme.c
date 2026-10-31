@@ -156,6 +156,47 @@ struct parser
   const char *p;
 };
 
+/* Keyword values of the theme file, e.g. "align = center".  */
+struct keyword
+{
+  const char *name;
+  int value;
+};
+
+static const struct keyword element_kinds[] =
+  {
+    {"box", ELEMENT_BOX},
+    {"image", ELEMENT_IMAGE},
+    {"label", ELEMENT_LABEL},
+    {"passphrase", ELEMENT_PASSPHRASE},
+    {NULL, 0}
+  };
+
+static const struct keyword aligns[] =
+  {
+    {"left", ALIGN_LEFT},
+    {"center", ALIGN_CENTER},
+    {"right", ALIGN_RIGHT},
+    {NULL, 0}
+  };
+
+static const struct keyword mask_modes[] =
+  {
+    {"per-char", MASK_PER_CHAR},
+    {"fixed", MASK_FIXED},
+    {"hidden", MASK_HIDDEN},
+    {NULL, 0}
+  };
+
+static const struct keyword background_modes[] =
+  {
+    {"stretch", BACKGROUND_STRETCH},
+    {"crop", BACKGROUND_CROP},
+    {"fit", BACKGROUND_FIT},
+    {"center", BACKGROUND_CENTER},
+    {NULL, 0}
+  };
+
 static grub_video_rgba_color_t
 rgba (grub_uint8_t red, grub_uint8_t green, grub_uint8_t blue,
       grub_uint8_t alpha)
@@ -362,6 +403,21 @@ parse_number (const char *s, int *n)
   return GRUB_ERR_NONE;
 }
 
+/* Sets *VALUE to what keyword S means in TABLE.  WHAT names the setting
+   for the error message.  */
+static grub_err_t
+parse_keyword (const struct keyword *table, const char *what, const char *s,
+	       int *value)
+{
+  for (; table->name; table++)
+    if (grub_strcmp (table->name, s) == 0)
+      {
+	*value = table->value;
+	return GRUB_ERR_NONE;
+      }
+  return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid %s `%s'"), what, s);
+}
+
 static grub_err_t
 replace_string (char **dst, const char *value)
 {
@@ -394,6 +450,9 @@ static grub_err_t
 set_element_property (struct theme *theme, struct element *e,
 		      const char *name, const char *value)
 {
+  grub_err_t err;
+  int v;
+
   if (grub_strcmp (name, "id") == 0)
     return GRUB_ERR_NONE;
   if (grub_strcmp (name, "left") == 0)
@@ -434,29 +493,17 @@ set_element_property (struct theme *theme, struct element *e,
     return parse_number (value, &e->fixed_length);
   if (grub_strcmp (name, "align") == 0)
     {
-      if (grub_strcmp (value, "left") == 0)
-	e->align = ALIGN_LEFT;
-      else if (grub_strcmp (value, "center") == 0)
-	e->align = ALIGN_CENTER;
-      else if (grub_strcmp (value, "right") == 0)
-	e->align = ALIGN_RIGHT;
-      else
-	return grub_error (GRUB_ERR_BAD_ARGUMENT,
-			   N_("invalid align value `%s'"), value);
-      return GRUB_ERR_NONE;
+      err = parse_keyword (aligns, "align", value, &v);
+      if (err == GRUB_ERR_NONE)
+	e->align = v;
+      return err;
     }
   if (grub_strcmp (name, "mask-mode") == 0)
     {
-      if (grub_strcmp (value, "per-char") == 0)
-	e->mask_mode = MASK_PER_CHAR;
-      else if (grub_strcmp (value, "fixed") == 0)
-	e->mask_mode = MASK_FIXED;
-      else if (grub_strcmp (value, "hidden") == 0)
-	e->mask_mode = MASK_HIDDEN;
-      else
-	return grub_error (GRUB_ERR_BAD_ARGUMENT,
-			   N_("invalid mask-mode value `%s'"), value);
-      return GRUB_ERR_NONE;
+      err = parse_keyword (mask_modes, "mask-mode", value, &v);
+      if (err == GRUB_ERR_NONE)
+	e->mask_mode = v;
+      return err;
     }
   return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("unknown property `%s'"), name);
 }
@@ -492,18 +539,13 @@ set_theme_property (struct theme *theme, const char *name, const char *value)
     }
   if (grub_strcmp (name, "background-mode") == 0)
     {
-      if (grub_strcmp (value, "stretch") == 0)
-	theme->background_mode = BACKGROUND_STRETCH;
-      else if (grub_strcmp (value, "crop") == 0)
-	theme->background_mode = BACKGROUND_CROP;
-      else if (grub_strcmp (value, "fit") == 0)
-	theme->background_mode = BACKGROUND_FIT;
-      else if (grub_strcmp (value, "center") == 0)
-	theme->background_mode = BACKGROUND_CENTER;
-      else
-	return grub_error (GRUB_ERR_BAD_ARGUMENT,
-			   N_("invalid background-mode value `%s'"), value);
-      return GRUB_ERR_NONE;
+      int v;
+      grub_err_t err = parse_keyword (background_modes, "background-mode",
+				      value, &v);
+
+      if (err == GRUB_ERR_NONE)
+	theme->background_mode = v;
+      return err;
     }
   return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("unknown property `%s'"), name);
 }
@@ -512,25 +554,14 @@ static struct element *
 add_element (struct theme *theme, const char *kind)
 {
   struct element *e;
+  int v;
 
+  if (parse_keyword (element_kinds, "element", kind, &v) != GRUB_ERR_NONE)
+    return NULL;
   e = grub_zalloc (sizeof (*e));
   if (e == NULL)
     return NULL;
-
-  if (grub_strcmp (kind, "box") == 0)
-    e->kind = ELEMENT_BOX;
-  else if (grub_strcmp (kind, "image") == 0)
-    e->kind = ELEMENT_IMAGE;
-  else if (grub_strcmp (kind, "label") == 0)
-    e->kind = ELEMENT_LABEL;
-  else if (grub_strcmp (kind, "passphrase") == 0)
-    e->kind = ELEMENT_PASSPHRASE;
-  else
-    {
-      grub_free (e);
-      grub_error (GRUB_ERR_BAD_ARGUMENT, N_("unknown element `%s'"), kind);
-      return NULL;
-    }
+  e->kind = v;
 
   e->show = STATE_ALL;
   e->color = (e->kind == ELEMENT_BOX) ? rgba (0, 0, 0, 128)
@@ -1180,32 +1211,25 @@ read_passphrase (struct screen *s, char *buf, grub_size_t size)
 /* The real cryptomount, which our override shadows.  */
 static grub_command_t real_cryptomount;
 
+/* The passphrase is read directly behind this prefix, so the argument for
+   cryptomount needs no copy of it (GRUB's argument parser does not copy
+   either), and wiping that one buffer wipes every copy we made.  */
+#define PASSWORD_OPTION		"--password="
+#define PASSWORD_OPTION_LEN	(sizeof (PASSWORD_OPTION) - 1)
+
+/* PASSWORD_ARG is "--password=..." or NULL to ask the plain way.  */
 static grub_err_t
-cryptomount (char *device, int by_uuid, const char *passphrase)
+cryptomount (char *device, int by_uuid, char *password_arg)
 {
   char *argv[3];
-  char *password = NULL;
   int argc = 0;
-  grub_err_t err;
 
-  if (passphrase)
-    {
-      password = grub_xasprintf ("--password=%s", passphrase);
-      if (password == NULL)
-	return grub_errno;
-      argv[argc++] = password;
-    }
+  if (password_arg)
+    argv[argc++] = password_arg;
   if (by_uuid)
     argv[argc++] = (char *) "-u";
   argv[argc++] = device;
-
-  err = real_cryptomount->func (real_cryptomount, argc, argv);
-  if (password)
-    {
-      grub_memset (password, 0, grub_strlen (password));
-      grub_free (password);
-    }
-  return err;
+  return real_cryptomount->func (real_cryptomount, argc, argv);
 }
 
 /* Sets *FALLBACK if the themed screen could not be shown at all.  */
@@ -1215,7 +1239,7 @@ unlock (struct theme *theme, char *device, int by_uuid, int *fallback)
   struct grub_video_mode_info info;
   struct grub_term_output *outputs;
   struct screen s;
-  char *pass;
+  char *password_arg, *pass;
   int mode_set = 0;
   grub_err_t err;
 
@@ -1243,9 +1267,12 @@ unlock (struct theme *theme, char *device, int by_uuid, int *fallback)
   if (prepare_theme (theme, info.width, info.height) != GRUB_ERR_NONE)
     goto setup_failed;
 
-  pass = grub_zalloc (GRUB_CRYPTODISK_MAX_PASSPHRASE);
-  if (pass == NULL)
+  password_arg = grub_zalloc (PASSWORD_OPTION_LEN
+			      + GRUB_CRYPTODISK_MAX_PASSPHRASE);
+  if (password_arg == NULL)
     goto setup_failed;
+  grub_memcpy (password_arg, PASSWORD_OPTION, PASSWORD_OPTION_LEN);
+  pass = password_arg + PASSWORD_OPTION_LEN;
 
   s.theme = theme;
   s.width = info.width;
@@ -1267,7 +1294,7 @@ unlock (struct theme *theme, char *device, int by_uuid, int *fallback)
 	}
       s.state = STATE_BUSY;
       draw_screen (&s);
-      err = cryptomount (device, by_uuid, pass);
+      err = cryptomount (device, by_uuid, password_arg);
       grub_memset (pass, 0, GRUB_CRYPTODISK_MAX_PASSPHRASE);
       s.pass_len = 0;
       if (err != GRUB_ERR_ACCESS_DENIED
@@ -1276,7 +1303,9 @@ unlock (struct theme *theme, char *device, int by_uuid, int *fallback)
       grub_errno = GRUB_ERR_NONE;
       s.state = STATE_ERROR;
     }
-  grub_free (pass);
+  /* Wipe again before freeing, whichever way the loop ended.  */
+  grub_memset (pass, 0, GRUB_CRYPTODISK_MAX_PASSPHRASE);
+  grub_free (password_arg);
 
   grub_term_outputs = outputs;
   if (mode_set)

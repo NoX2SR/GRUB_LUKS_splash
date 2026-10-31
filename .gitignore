@@ -11,3 +11,6 @@ diagnose.txt
 
 __pycache__/
 *.pyc
+
+# Editor settings (contain local paths)
+/.vscode/

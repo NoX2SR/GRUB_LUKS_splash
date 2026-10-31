@@ -44,10 +44,6 @@ class GrubImage:
     disable_cli: bool = False
     unsupported: list = field(default_factory=list)
 
-    @property
-    def unlocks_disk(self):
-        return "cryptomount" in self.config or "unlock_theme" in self.config
-
 
 def _cstr(data, offset=0):
     end = data.find(b"\0", offset)

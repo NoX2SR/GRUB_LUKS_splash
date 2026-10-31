@@ -1,4 +1,4 @@
-"""Patch the early config embedded in a GRUB core image.
+"""Patch GRUB configs: the early config embedded in a core image, and menus.
 
 grub-install with GRUB_ENABLE_CRYPTODISK=y embeds lines such as
 
@@ -85,7 +85,7 @@ MENU_END = "### END unlock-theme ###"
 # image is often also installed as EFI/BOOT/BOOTX64.EFI. Image readers and the
 # video driver are separate modules nothing else pulls in.
 MENU_BLOCK = f"""{MENU_BEGIN}
-# Themed passphrase screen for cryptomount (installed by GRUB Unlock Theme).
+# Themed passphrase screen for cryptomount (installed by GRUB_LUKS_splash).
 if insmod "$config_directory/{MODULE_FILE}"; then
   insmod efi_gop
   insmod png
@@ -130,5 +130,5 @@ def templates_dir(text):
 def menu_template():
     """A grub.d script that emits the block, so regenerating keeps it."""
     return ("#!/bin/sh\n"
-            "# Added by GRUB Unlock Theme (install.py); removed on uninstall.\n"
+            "# Added by GRUB_LUKS_splash (install.py); removed on uninstall.\n"
             "cat <<'EOF'\n" + MENU_BLOCK + "EOF\n")

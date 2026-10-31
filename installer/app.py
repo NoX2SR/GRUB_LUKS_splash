@@ -36,15 +36,13 @@ BUILD_SCRIPT = os.path.join(REPO, "scripts", "build-grub.sh")
 SYSTEM_MODULE_ROOT = "/usr/lib/grub"
 BACKUP_SUFFIX = ".pre-unlock-theme"
 MANIFEST = "unlock-theme.json"
+TEMPLATE_NAME = "05_unlock_theme"
 # Modules the themed screen needs besides what the image already has.
 EXTRA_MODULES = ["unlock_theme", "efi_gop", "png", "jpeg", "tga"]
 
 
 class InstallError(Exception):
     pass
-
-
-TEMPLATE_NAME = "05_unlock_theme"
 
 
 @dataclass
@@ -368,7 +366,7 @@ def sign(path):
 # Manifest --------------------------------------------------------------------
 
 def manifest_path(cand):
-    return os.path.join(os.path.dirname(cand.path), MANIFEST)
+    return os.path.join(cand.dir, MANIFEST)
 
 
 def read_manifest(cand):
@@ -387,12 +385,30 @@ def write_manifest(cand, data):
 
 # Commands --------------------------------------------------------------------
 
-def check_writable(cand, args):
-    if args.dry_run:
-        return
-    d = os.path.dirname(cand.path)
-    if not os.access(d, os.W_OK):
+def check_writable(d, args):
+    if not args.dry_run and not os.access(d, os.W_OK):
         raise InstallError(f"cannot write to {d}; run with sudo")
+
+
+def write_file(path, data):
+    """Replaces PATH in one step, so an interruption leaves the old file."""
+    tmp = path + ".new"
+    with open(tmp, "wb" if isinstance(data, bytes) else "w") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+def backup_once(path):
+    """Keeps the first original; a reinstall must not back up a patched file."""
+    backup = path + BACKUP_SUFFIX
+    if not os.path.exists(backup):
+        shutil.copyfile(path, backup)
+
+
+def remove_files(*paths):
+    for path in paths:
+        if path and os.path.exists(path):
+            os.unlink(path)
 
 
 def cmd_list(args):
@@ -412,8 +428,8 @@ def menu_template_path(cand):
 
 def install_menu(cand, theme, args):
     template = menu_template_path(cand)
-    if not args.dry_run and template and not os.access(os.path.dirname(template), os.W_OK):
-        raise InstallError(f"cannot write to {os.path.dirname(template)}; run with sudo")
+    if template:
+        check_writable(os.path.dirname(template), args)
     source = module_source(args, cand.image.target)     # builds and checks versions
     module = source.extra_mods.get("unlock_theme", (None,))[0] or \
         os.path.join(source.moddir, grubconfig.MODULE_FILE)
@@ -442,22 +458,103 @@ def install_menu(cand, theme, args):
     shutil.copyfile(module, os.path.join(cand.dir, grubconfig.MODULE_FILE))
     install_theme(theme, cand.dir)
     if not cand.patched:
-        backup = cand.menu_cfg + BACKUP_SUFFIX
-        if not os.path.exists(backup):
-            shutil.copyfile(cand.menu_cfg, backup)
-        tmp = cand.menu_cfg + ".new"
-        with open(tmp, "w") as f:
-            f.write(grubconfig.add_menu_block(cand.menu_text))
-        os.replace(tmp, cand.menu_cfg)
+        backup_once(cand.menu_cfg)
+        write_file(cand.menu_cfg, grubconfig.add_menu_block(cand.menu_text))
     if template:
-        with open(template, "w") as f:
-            f.write(grubconfig.menu_template())
+        write_file(template, grubconfig.menu_template())
         os.chmod(template, 0o755)
 
     manifest = read_manifest(cand)
     manifest.update({"kind": "menu", "config": os.path.basename(cand.menu_cfg),
                      "theme": theme.name, "template": template})
     write_manifest(cand, manifest)
+
+
+def install_embedded(cand, theme, args):
+    img = cand.image
+    if img.unsupported:
+        raise InstallError("this image contains " + ", ".join(img.unsupported) +
+                           ", which the installer cannot carry over")
+    if cand.patched:
+        new_config, changes, skipped = img.config, [], []
+    else:
+        new_config, changes, skipped = grubconfig.patch(img.config)
+        if not changes:
+            raise InstallError("no cryptomount line in this image can be patched: " +
+                               "; ".join(skipped))
+    modules = img.modules + EXTRA_MODULES
+    source = module_source(args, img.target) if changes else None
+    if source:
+        missing = source.missing(modules)
+        if missing:
+            raise InstallError("modules of this image are missing from the GRUB "
+                               "build: " + ", ".join(missing) +
+                               " (try --modules project or --modules system)")
+
+    say(f"\nImage:  {cand.path}")
+    say(f"Theme:  {theme.name} ({theme.dir})")
+    if changes:
+        mode = "system GRUB modules + unlock_theme" if args.modules == "system" \
+            else "this project's GRUB build"
+        say(f"Build:  {mode}")
+        say(f"Backup: {cand.path + BACKUP_SUFFIX}")
+        say("Config changes:")
+        for old, new in changes:
+            say(f"  - {old.strip()}")
+            say(f"  + {new.strip()}")
+        for line in skipped:
+            say(f"  (left unchanged: {line.strip()})")
+    else:
+        say("The image is already patched; only the theme is replaced.")
+    need_sign = secure_boot_plan(cand, args) if changes else False
+    if not confirm("\nProceed?", args):
+        raise InstallError("aborted")
+
+    if changes:
+        if not args.dry_run:
+            backup_once(cand.path)
+        rebuild(cand, new_config, modules, source, args)
+    if args.dry_run:
+        say("(dry run) theme and manifest not written")
+        return
+    install_theme(theme, cand.dir)
+    if need_sign:
+        sign(cand.path)
+
+    manifest = read_manifest(cand)
+    manifest.update({
+        "image": os.path.basename(cand.path),
+        "backup": os.path.basename(cand.path) + BACKUP_SUFFIX,
+        "theme": theme.name,
+        "patched_sha256": grubimage.sha256(cand.path),
+    })
+    if changes:
+        manifest["modules"] = args.modules
+    write_manifest(cand, manifest)
+
+
+def cmd_install(args):
+    cand = pick_image(discover(args.esp), args, "the one that asks for the passphrase")
+    if cand.patched:
+        say(f"\n{cand.path} already has the unlock screen; installing the chosen theme.")
+    check_writable(cand.dir, args)
+
+    # The work directory holds an extracted archive theme until it is copied.
+    with tempfile.TemporaryDirectory(prefix="unlock-theme-") as work:
+        theme = pick_theme(args, work)
+        for w in theme.warnings:
+            say(f"Warning: {w}")
+        install = install_menu if cand.kind == "menu" else install_embedded
+        install(cand, theme, args)
+    if args.dry_run:
+        return
+
+    say(f"\nInstalled. The theme is in "
+        f"{os.path.join(cand.dir, grubconfig.THEME_DIR_NAME)}.")
+    say("If the theme ever fails to load, GRUB falls back to the normal passphrase prompt.")
+    if cand.kind == "embedded":
+        say("Note: reinstalling GRUB (grub-install) replaces the patched image; run this "
+            "installer again afterwards.")
 
 
 def uninstall_menu(cand, args):
@@ -470,123 +567,12 @@ def uninstall_menu(cand, args):
     if args.dry_run:
         say("(dry run) nothing changed")
         return
-    tmp = cand.menu_cfg + ".new"
-    with open(tmp, "w") as f:
-        f.write(grubconfig.remove_menu_block(cand.menu_text))
-    os.replace(tmp, cand.menu_cfg)
-    for path in (template, cand.menu_cfg + BACKUP_SUFFIX,
-                 os.path.join(cand.dir, grubconfig.MODULE_FILE), manifest_path(cand)):
-        if path and os.path.exists(path):
-            os.unlink(path)
-    shutil.rmtree(os.path.join(cand.dir, grubconfig.THEME_DIR_NAME), ignore_errors=True)
-    say("Uninstalled.")
+    write_file(cand.menu_cfg, grubconfig.remove_menu_block(cand.menu_text))
+    remove_files(template, cand.menu_cfg + BACKUP_SUFFIX,
+                 os.path.join(cand.dir, grubconfig.MODULE_FILE))
 
 
-def cmd_install(args, cand=None):
-    if cand is None:
-        cand = pick_image(discover(args.esp), args, "the one that asks for the passphrase")
-    img = cand.image
-    if img.unsupported and cand.kind == "embedded":
-        raise InstallError("this image contains " + ", ".join(img.unsupported) +
-                           ", which the installer cannot carry over")
-    check_writable(cand, args)
-
-    with tempfile.TemporaryDirectory(prefix="unlock-theme-") as work:
-        theme = pick_theme(args, work)
-        for w in theme.warnings:
-            say(f"Warning: {w}")
-
-        if cand.kind == "menu":
-            install_menu(cand, theme, args)
-            if not args.dry_run:
-                say(f"\nInstalled. The theme is in "
-                    f"{os.path.join(cand.dir, grubconfig.THEME_DIR_NAME)}.")
-                say("If the theme ever fails to load, GRUB falls back to the normal "
-                    "passphrase prompt.")
-            return
-
-        if cand.patched:
-            new_config, changes, skipped = img.config, [], []
-        else:
-            new_config, changes, skipped = grubconfig.patch(img.config)
-            if not changes:
-                raise InstallError("no cryptomount line in this image can be patched: " +
-                                   "; ".join(skipped))
-        source = module_source(args, img.target) if changes else None
-        if source:
-            missing = source.missing(img.modules + EXTRA_MODULES)
-            if missing:
-                raise InstallError("modules of this image are missing from the GRUB "
-                                   "build: " + ", ".join(missing) +
-                                   " (try --modules project or --modules system)")
-
-        say(f"\nImage:  {cand.path}")
-        say(f"Theme:  {theme.name} ({theme.dir})")
-        if changes:
-            mode = "system GRUB modules + unlock_theme" if args.modules == "system" \
-                else "this project's GRUB build"
-            say(f"Build:  {mode}")
-            say(f"Backup: {cand.path + BACKUP_SUFFIX}")
-            say("Config changes:")
-            for old, new in changes:
-                say(f"  - {old.strip()}")
-                say(f"  + {new.strip()}")
-            for line in skipped:
-                say(f"  (left unchanged: {line.strip()})")
-        else:
-            say("The image is already patched; only the theme is replaced.")
-        need_sign = secure_boot_plan(cand, args) if changes else False
-        if not confirm("\nProceed?", args):
-            raise InstallError("aborted")
-
-        if changes:
-            backup = cand.path + BACKUP_SUFFIX
-            if not args.dry_run and not os.path.exists(backup):
-                shutil.copyfile(cand.path, backup)
-            rebuild(cand, new_config, img.modules + EXTRA_MODULES, source, args)
-        if args.dry_run:
-            say("(dry run) theme and manifest not written")
-            return
-        install_theme(theme, os.path.dirname(cand.path))
-        if need_sign:
-            sign(cand.path)
-
-        manifest = read_manifest(cand)
-        manifest.update({
-            "image": os.path.basename(cand.path),
-            "backup": os.path.basename(cand.path) + BACKUP_SUFFIX,
-            "theme": theme.name,
-            "patched_sha256": grubimage.sha256(cand.path),
-        })
-        if changes:
-            manifest["modules"] = args.modules
-        write_manifest(cand, manifest)
-
-    say(f"\nInstalled. The theme is in "
-        f"{os.path.join(os.path.dirname(cand.path), grubconfig.THEME_DIR_NAME)}.")
-    say("If the theme ever fails to load, GRUB falls back to the normal passphrase prompt.")
-    say("Note: reinstalling GRUB (grub-install) replaces the patched image; run this "
-        "installer again afterwards.")
-
-
-def cmd_uninstall(args, cand=None):
-    if cand is None:
-        cands = [c for c in discover(args.esp) if c.patched
-                 or os.path.exists(manifest_path(c))]
-        if not cands:
-            raise InstallError("no patched GRUB image found")
-        if args.grub_location:
-            cand = pick_image(cands, args, "to restore")
-        elif len(cands) == 1 or args.yes:
-            cand = cands[0]
-        else:
-            say("\nPatched images:")
-            cand = cands[choose("Image", [(i, c.path) for i, c in enumerate(cands, 1)]) - 1]
-    check_writable(cand, args)
-    if cand.kind == "menu":
-        uninstall_menu(cand, args)
-        return
-
+def uninstall_embedded(cand, args):
     manifest = read_manifest(cand)
     backup = cand.path + BACKUP_SUFFIX
     if cand.patched:
@@ -609,24 +595,40 @@ def cmd_uninstall(args, cand=None):
         return
 
     if action == "restore":
-        tmp = cand.path + ".new"
-        shutil.copyfile(backup, tmp)
-        os.replace(tmp, cand.path)
+        with open(backup, "rb") as f:
+            write_file(cand.path, f.read())
         os.unlink(backup)
+        if esp.secure_boot_enabled():
+            say("Secure Boot is enabled: make sure the restored image is signed "
+                "(e.g. sbctl sign -s).")
     elif action == "rebuild":
         new_config, _ = grubconfig.unpatch(cand.image.config)
         source = module_source(args, cand.image.target)
         modules = [m for m in cand.image.modules if m != "unlock_theme"]
         rebuild(cand, new_config, modules, source, args)
 
-    d = os.path.dirname(cand.path)
-    shutil.rmtree(os.path.join(d, grubconfig.THEME_DIR_NAME), ignore_errors=True)
-    if os.path.exists(manifest_path(cand)):
-        os.unlink(manifest_path(cand))
+
+def cmd_uninstall(args):
+    cands = [c for c in discover(args.esp) if c.patched
+             or os.path.exists(manifest_path(c))]
+    if not cands:
+        raise InstallError("no patched GRUB image found")
+    if args.grub_location:
+        cand = pick_image(cands, args, "to restore")
+    elif len(cands) == 1 or args.yes:
+        cand = cands[0]
+    else:
+        say("\nPatched images:")
+        cand = cands[choose("Image", [(i, c.path) for i, c in enumerate(cands, 1)]) - 1]
+    check_writable(cand.dir, args)
+
+    uninstall = uninstall_menu if cand.kind == "menu" else uninstall_embedded
+    uninstall(cand, args)
+    if args.dry_run:
+        return
+    shutil.rmtree(os.path.join(cand.dir, grubconfig.THEME_DIR_NAME), ignore_errors=True)
+    remove_files(manifest_path(cand))
     say("Uninstalled.")
-    if action == "restore" and esp.secure_boot_enabled():
-        say("Secure Boot is enabled: make sure the restored image is signed "
-            "(e.g. sbctl sign -s).")
 
 
 def common_args(parser):
@@ -669,17 +671,7 @@ def main_install():
                         help="only list the GRUB images found and exit")
     common_args(parser)
     args = parser.parse_args()
-
-    def install(args):
-        if args.list:
-            cmd_list(args)
-            return
-        cand = pick_image(discover(args.esp), args, "the one that asks for the passphrase")
-        if cand.patched:
-            say(f"\n{cand.path} already has the unlock screen; installing the chosen theme.")
-        cmd_install(args, cand)
-
-    run(install, args)
+    run(cmd_list if args.list else cmd_install, args)
 
 
 def main_uninstall():
