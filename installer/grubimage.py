@@ -36,6 +36,7 @@ class GrubImage:
     path: str
     target: str
     modules: list = field(default_factory=list)
+    module_data: dict = field(default_factory=dict)   # name -> embedded ELF object
     config: str = ""
     prefix: str = ""
     memdisk: bytes = None
@@ -113,7 +114,9 @@ def _parse_objects(img, data, info, wide):
             raise ImageError("bad module header")
         body = data[pos + 8:pos + objsize]
         if kind == OBJ_ELF:
-            img.modules.append(_elf_modname(body))
+            name = _elf_modname(body)
+            img.modules.append(name)
+            img.module_data[name] = body
         elif kind == OBJ_CONFIG:
             img.config = _cstr(body)
         elif kind == OBJ_PREFIX:
@@ -160,6 +163,13 @@ def read_image(path):
             offset, size = sections[".sbat"]
             img.sbat = data[offset:offset + size].rstrip(b"\0")
         return img
+
+
+def same_grub(a, b, ignore=()):
+    """True if images A and B were built from the same GRUB: grub-mkimage
+    embeds module files unchanged, so their shared modules are identical."""
+    shared = (set(a.module_data) & set(b.module_data)) - set(ignore)
+    return bool(shared) and all(a.module_data[m] == b.module_data[m] for m in shared)
 
 
 def sha256(path):

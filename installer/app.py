@@ -398,11 +398,11 @@ def write_file(path, data):
     os.replace(tmp, path)
 
 
-def backup_once(path):
-    """Keeps the first original; a reinstall must not back up a patched file."""
-    backup = path + BACKUP_SUFFIX
-    if not os.path.exists(backup):
-        shutil.copyfile(path, backup)
+def backup(path):
+    """Backs up an unpatched PATH. Always replaces an older backup: if GRUB was
+    reinstalled since, that backup is outdated and restoring it could leave a
+    core image that doesn't match the installed modules."""
+    shutil.copyfile(path, path + BACKUP_SUFFIX)
 
 
 def remove_files(*paths):
@@ -458,7 +458,7 @@ def install_menu(cand, theme, args):
     shutil.copyfile(module, os.path.join(cand.dir, grubconfig.MODULE_FILE))
     install_theme(theme, cand.dir)
     if not cand.patched:
-        backup_once(cand.menu_cfg)
+        backup(cand.menu_cfg)
         write_file(cand.menu_cfg, grubconfig.add_menu_block(cand.menu_text))
     if template:
         write_file(template, grubconfig.menu_template())
@@ -512,7 +512,7 @@ def install_embedded(cand, theme, args):
 
     if changes:
         if not args.dry_run:
-            backup_once(cand.path)
+            backup(cand.path)
         rebuild(cand, new_config, modules, source, args)
     if args.dry_run:
         say("(dry run) theme and manifest not written")
@@ -572,17 +572,31 @@ def uninstall_menu(cand, args):
                  os.path.join(cand.dir, grubconfig.MODULE_FILE))
 
 
+def backup_matches(cand, backup, manifest):
+    """True if BACKUP is the original of the current patched image. It may be
+    older: installers before the backup fix kept the first backup even when
+    grub-install replaced the image in between."""
+    if not os.path.exists(backup):
+        return False
+    if manifest.get("patched_sha256") not in (None, grubimage.sha256(cand.path)):
+        return False
+    if manifest.get("modules") == "project":
+        return True         # built from this project's GRUB, so no module comparison
+    original = grubimage.read_image(backup)
+    return original is not None and grubimage.same_grub(original, cand.image,
+                                                        ignore=EXTRA_MODULES)
+
+
 def uninstall_embedded(cand, args):
     manifest = read_manifest(cand)
     backup = cand.path + BACKUP_SUFFIX
     if cand.patched:
-        current = grubimage.sha256(cand.path)
-        if os.path.exists(backup) and manifest.get("patched_sha256") in (None, current):
+        if backup_matches(cand, backup, manifest):
             say(f"Restore {backup} -> {cand.path}")
             action = "restore"
         else:
-            say("No matching backup; the image will be rebuilt with cryptomount instead "
-                "of unlock_theme.")
+            say("No matching backup (missing, or from an older GRUB); the image will be "
+                "rebuilt with cryptomount instead of unlock_theme.")
             action = "rebuild"
     else:
         say(f"{cand.path} is not patched (GRUB was probably reinstalled); only the "
@@ -606,6 +620,7 @@ def uninstall_embedded(cand, args):
         source = module_source(args, cand.image.target)
         modules = [m for m in cand.image.modules if m != "unlock_theme"]
         rebuild(cand, new_config, modules, source, args)
+        remove_files(backup)        # outdated, so never restore it later
 
 
 def cmd_uninstall(args):
