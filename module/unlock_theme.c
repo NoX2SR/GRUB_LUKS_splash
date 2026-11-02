@@ -1264,6 +1264,14 @@ unlock (struct theme *theme, char *device, int by_uuid, int *fallback)
 	goto setup_failed;
     }
 
+  /* gfxmenu redraws its timeout bar with clipping to the bar's area and
+     leaves it enabled, so when the timeout runs out only that strip of
+     the screen would be drawn.  Draw to the whole display.  */
+  grub_video_set_active_render_target (GRUB_VIDEO_RENDER_TARGET_DISPLAY);
+  grub_video_set_viewport (0, 0, info.width, info.height);
+  grub_video_set_area_status (GRUB_VIDEO_AREA_DISABLED);
+  grub_errno = GRUB_ERR_NONE;
+
   if (prepare_theme (theme, info.width, info.height) != GRUB_ERR_NONE)
     goto setup_failed;
 
